@@ -1,0 +1,39 @@
+cabal-version:      3.8
+name:               vista
+version:            0.1.0.0
+license:            BSD-2-Clause
+license-file:       LICENSE
+author:             Simre1
+maintainer:         simre4775@gmail.com
+category:           Graphics
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+
+common common
+    ghc-options: -Wall
+    build-depends:    
+        base ^>=4.17.2.1,
+        transformers,
+        text,
+        containers,
+        blaze-markup
+    default-language: GHC2021
+    default-extensions:
+        TypeFamilies
+        OverloadedStrings
+        DerivingStrategies
+        DataKinds
+        NoFieldSelectors
+        DuplicateRecordFields
+
+library
+    import:           common
+    exposed-modules:  
+        Data.ExtractType
+        Data.Events
+        Vista.Markup
+        Vista.Elements.Basic
+        Vista.Elements.Events
+        Vista.Elements.Interactive
+    hs-source-dirs:   src
