@@ -13,7 +13,7 @@ extra-doc-files:    CHANGELOG.md
 common common
     ghc-options: -Wall
     build-depends:    
-        base ^>=4.17.2.1,
+        base >=4.17.2.1,
         transformers,
         text,
         containers,

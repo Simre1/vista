@@ -23,6 +23,7 @@ module Vista.Markup
     Pure (..),
     Apply (..),
     Bind (..),
+    MFix (..),
     MonadContext (..),
     monadContext,
 
@@ -35,12 +36,13 @@ module Vista.Markup
 where
 
 import Control.Applicative (Applicative (..))
+import Control.Monad.Fix
 import Data.Coerce (Coercible, coerce)
 import Data.ExtractType qualified as ET
 import Data.Kind
 import GHC.Generics
-import Unsafe.Coerce (unsafeCoerce)
 import GHC.TypeLits
+import Unsafe.Coerce (unsafeCoerce)
 
 newtype Markup (c :: (Type -> Type) -> Type) (e :: Type) = Markup (forall f. c f -> f e)
 
@@ -93,6 +95,9 @@ instance (HasElements c '[Pure, Apply c, Map c]) => Applicative (Markup c) where
 data Bind c b where
   Bind :: Markup c a -> (a -> Markup c b) -> Bind c b
 
+data MFix c b where
+  MFix :: (a -> Markup c a) -> MFix c a
+
 instance (HasElements c '[Bind c, Pure, Apply c, Map c]) => Monad (Markup c) where
   m >>= f = toMarkup $ Bind m f
 
@@ -102,21 +107,26 @@ instance (HasElements c [Pure, Apply c, Map c], Semigroup a) => Semigroup (Marku
 instance (HasElements c [Pure, Apply c, Map c], Monoid a) => Monoid (Markup c a) where
   mempty = pure mempty
 
+instance (HasElements c [MFix c, Bind c, Pure, Apply c, Map c]) => MonadFix (Markup c) where
+  mfix = toMarkup . MFix
+
 data MonadContext c f = MonadContext
   { map :: Element f (Map c),
     pure :: Element f Pure,
     apply :: Element f (Apply c),
-    bind :: Element f (Bind c)
+    bind :: Element f (Bind c),
+    mfix :: Element f (MFix c)
   }
   deriving (Generic)
 
-monadContext :: (Monad m) => c m -> MonadContext c m
+monadContext :: (MonadFix m) => c m -> MonadContext c m
 monadContext c =
   MonadContext
     { map = makeElement $ \(Map f a) -> f <$> runMarkup c a,
       pure = makeElement $ \(Pure a) -> pure a,
       apply = makeElement $ \(Apply f a) -> runMarkup c f <*> runMarkup c a,
-      bind = makeElement $ \(Bind a f) -> runMarkup c a >>= runMarkup c . f
+      bind = makeElement $ \(Bind a f) -> runMarkup c a >>= runMarkup c . f,
+      mfix = makeElement $ \(MFix f) -> mfix (runMarkup c . f)
     }
 
 newtype Fix c f = Fix
@@ -153,11 +163,11 @@ type family InferType2' (f :: Type -> Type) (part :: k -> l -> Type -> Type) :: 
   InferType2' (l :*: r) b = Append (InferType2' l b) (InferType2' r b)
   InferType2' _ _ = '[]
 
-type family Single as where
-  Single '[a] = a
-  Single '[] = TypeError (Text "Element is not within context")
-  Single as = TypeError (Text "More than one element handler is within the context: " :$$: ShowType as)
+type family Single as err where
+  Single '[a] _ = a
+  Single '[] err = TypeError (Text "Element is not within context: " :<>: err)
+  Single as err = TypeError (Text "More than one element handler is within the context: " :$$: err)
 
-type InferType f part = Single (InferType' (Rep (f SearchF)) part)
+type InferType f part = Single (InferType' (Rep (f SearchF)) part) (ShowType part)
 
-type InferType2 f part = Single (InferType2' (Rep (f SearchF)) part)
+type InferType2 f part = Single (InferType2' (Rep (f SearchF)) part) (ShowType part)
